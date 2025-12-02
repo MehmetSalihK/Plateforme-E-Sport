@@ -3,7 +3,7 @@
 <div align="center">
   
   **🌍 Languages:**
-  [🇫🇷 Français](README.md) | [🇬🇧 English](README_EN.md) | [🇹🇷 Türkçe](README_TR.md)
+  [🇫🇷 Français](README.md) | [🇹🇷 Türkçe](README_TR.md)
   
 </div>
 
