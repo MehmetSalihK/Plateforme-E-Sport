@@ -1,0 +1,474 @@
+@startuml class-diagram-esport-platform
+
+' Configuration
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor<<Entity>> LightBlue
+    BackgroundColor<<ValueObject>> LightYellow
+    BackgroundColor<<Service>> LightGreen
+    BackgroundColor<<Repository>> Wheat
+}
+
+' ==================== ENTITIES ====================
+
+class User <<Entity>> {
+  - id: int
+  - email: string
+  - passwordHash: string
+  - role: UserRole
+  - firstName: string
+  - lastName: string
+  - isActive: boolean
+  - isEmailVerified: boolean
+  - lastLoginAt: DateTime
+  - createdAt: DateTime
+  - updatedAt: DateTime
+  --
+  + register(): void
+  + login(password: string): boolean
+  + resetPassword(token: string, newPassword: string): void
+  + verifyEmail(token: string): void
+}
+
+enum UserRole {
+  PLAYER
+  ORGANIZER
+  ADMIN
+}
+
+class Player <<Entity>> {
+  - id: int
+  - userId: int
+  - pseudo: string
+  - avatarUrl: string
+  - bio: string
+  - countryCode: string
+  - eloRating: int
+  - totalMatches: int
+  - wins: int
+  - losses: int
+  - winRate: decimal
+  --
+  + updateProfile(data: PlayerUpdateDto): void
+  + calculateWinRate(): decimal
+  + updateElo(change: int): void
+}
+
+class Team <<Entity>> {
+  - id: int
+  - name: string
+  - tag: string
+  - captainId: int
+  - description: string
+  - logoUrl: string
+  - isActive: boolean
+  - createdAt: DateTime
+  --
+  + addMember(playerId: int, role: string): void
+  + removeMember(playerId: int): void
+  + changeCaptain(newCaptainId: int): void
+}
+
+class TeamMember <<Entity>> {
+  - id: int
+  - teamId: int
+  - playerId: int
+  - role: string
+  - joinedAt: DateTime
+  - leftAt: DateTime?
+  --
+  + leave(): void
+}
+
+class Tournament <<Entity>> {
+  - id: int
+  - name: string
+  - slug: string
+  - game: string
+  - organizerId: int
+  - description: string
+  - rulesText: string
+  - maxParticipants: int
+  - currentParticipants: int
+  - format: MatchFormat
+  - bracketType: BracketType
+  - status: TournamentStatus
+  - startDate: DateTime
+  - registrationDeadline: DateTime
+  - eloEnabled: boolean
+  - prizePool: decimal
+  - createdAt: DateTime
+  --
+  + open(): void
+  + start(): void
+  + complete(): void
+  + cancel(): void
+  + isFull(): boolean
+  + canRegister(): boolean
+}
+
+enum TournamentStatus {
+  DRAFT
+  OPEN
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum BracketType {
+  SINGLE_ELIMINATION
+  DOUBLE_ELIMINATION
+  ROUND_ROBIN
+  SWISS
+}
+
+enum MatchFormat {
+  BO1
+  BO3
+  BO5
+  BO7
+}
+
+class TournamentRegistration <<Entity>> {
+  - id: int
+  - tournamentId: int
+  - playerId: int?
+  - teamId: int?
+  - status: string
+  - seedPosition: int
+  - checkedIn: boolean
+  - registeredAt: DateTime
+  --
+  + confirm(): void
+  + cancel(): void
+  + checkIn(): void
+}
+
+class WaitingList <<Entity>> {
+  - id: int
+  - tournamentId: int
+  - playerId: int?
+  - teamId: int?
+  - position: int
+  - addedAt: DateTime
+  --
+  + notifyAvailability(): void
+  + moveToRegistration(): void
+}
+
+class Bracket <<Entity>> {
+  - id: int
+  - tournamentId: int
+  - type: BracketType
+  - totalRounds: int
+  - currentRound: int
+  - isFinalized: boolean
+  --
+  + generate(participants: List<Participant>): void
+  + advanceRound(): void
+  + finalize(): void
+}
+
+class Round <<Entity>> {
+  - id: int
+  - bracketId: int
+  - roundNumber: int
+  - name: string
+  - isCompleted: boolean
+  - startedAt: DateTime?
+  - completedAt: DateTime?
+  --
+  + start(): void
+  + complete(): void
+}
+
+class Match <<Entity>> {
+  - id: int
+  - roundId: int
+  - matchNumber: int
+  - participant1Id: int?
+  - participant2Id: int?
+  - winnerId: int?
+  - status: MatchStatus
+  - scheduledAt: DateTime?
+  - startedAt: DateTime?
+  - completedAt: DateTime?
+  - bestOf: int
+  --
+  + start(): void
+  + updateScore(p1Score: int, p2Score: int): void
+  + complete(winnerId: int): void
+  + validate(): void
+}
+
+enum MatchStatus {
+  PENDING
+  READY
+  ONGOING
+  COMPLETED
+  CANCELLED
+  WALKOVER
+}
+
+class MatchResult <<Entity>> {
+  - id: int
+  - matchId: int
+  - participant1Score: int
+  - participant2Score: int
+  - participant1EloChange: int
+  - participant2EloChange: int
+  - validatedBy: int?
+  - validatedAt: DateTime?
+  --
+  + validate(userId: int): void
+}
+
+class PlayerStatistics <<Entity>> {
+  - id: int
+  - playerId: int
+  - tournamentId: int
+  - matchesPlayed: int
+  - wins: int
+  - losses: int
+  - eloChange: int
+  - finalPosition: int?
+  --
+  + update(matchResult: MatchResult): void
+}
+
+class Notification <<Entity>> {
+  - id: int
+  - userId: int
+  - type: NotificationType
+  - title: string
+  - message: string
+  - linkUrl: string?
+  - isRead: boolean
+  - sentAt: DateTime
+  --
+  + markAsRead(): void
+}
+
+enum NotificationType {
+  TOURNAMENT_CREATED
+  REGISTRATION_CONFIRMED
+  MATCH_SCHEDULED
+  MATCH_STARTING
+  MATCH_COMPLETED
+  WAITING_LIST_AVAILABLE
+  TEAM_INVITATION
+  SYSTEM
+}
+
+class AuditLog <<Entity>> {
+  - id: long
+  - userId: int?
+  - action: string
+  - entityType: string
+  - entityId: int?
+  - ipAddress: string
+  - timestamp: DateTime
+  - details: JSON
+}
+
+' ==================== VALUE OBJECTS ====================
+
+class EloRating <<ValueObject>> {
+  - value: int
+  --
+  + calculate(opponentRating: int, score: decimal, kFactor: int): int
+  + isValid(): boolean
+}
+
+class Email <<ValueObject>> {
+  - value: string
+  --
+  + isValid(): boolean
+}
+
+class Password <<ValueObject>> {
+  - value: string
+  --
+  + hash(): string
+  + verify(hash: string): boolean
+  + meetsRequirements(): boolean
+}
+
+' ==================== SERVICES ====================
+
+class TournamentService <<Service>> {
+  --
+  + createTournament(dto: CreateTournamentDto): Tournament
+  + updateTournament(id: int, dto: UpdateTournamentDto): Tournament
+  + deleteTournament(id: int): void
+  + registerParticipant(tournamentId: int, participantId: int): Registration
+  + unregisterParticipant(registrationId: int): void
+  + getTournaments(filters: TournamentFilterDto): List<Tournament>
+}
+
+class BracketService <<Service>> {
+  --
+  + generateBracket(tournamentId: int): Bracket
+  + updateBracket(bracketId: int): void
+  + advanceRound(bracketId: int): void
+  + finalizeBracket(bracketId: int): void
+}
+
+class MatchService <<Service>> {
+  --
+  + createMatch(roundId: int, participants: Participants): Match
+  + updateScore(matchId: int, scores: Scores): void
+  + validateResult(matchId: int, userId: int): void
+  + scheduleMatch(matchId: int, dateTime: DateTime): void
+}
+
+class EloService <<Service>> {
+  --
+  + calculateNewRatings(rating1: int, rating2: int, score: decimal): Tuple<int, int>
+  + updatePlayerElo(playerId: int, change: int): void
+}
+
+class NotificationService <<Service>> {
+  --
+  + sendNotification(userId: int, notification: Notification): void
+  + sendEmail(email: string, template: string, data: object): void
+  + broadcastWebSocket(event: string, data: object): void
+}
+
+class AuthService <<Service>> {
+  --
+  + register(dto: RegisterDto): User
+  + login(email: string, password: string): AuthResult
+  + refreshToken(refreshToken: string): string
+  + logout(userId: int): void
+  + resetPassword(email: string): void
+}
+
+' ==================== ALGORITHMS ====================
+
+class EloCalculator {
+  - K_FACTOR: int = 32
+  --
+  + {static} calculateNewRatings(ratingA: int, ratingB: int, scoreA: decimal): Tuple<int, int>
+  - {static} calculateExpectedScore(ratingA: int, ratingB: int): decimal
+}
+
+class BracketGenerator {
+  --
+  + {static} generateSingleElimination(participants: List<Participant>): Bracket
+  + {static} generateDoubleElimination(participants: List<Participant>): Bracket
+  - {static} seedParticipants(participants: List<Participant>): List<Participant>
+}
+
+class MatchScheduler {
+  --
+  + {static} scheduleMatches(matches: List<Match>, startTime: DateTime): void
+  + {static} calculateMatchDuration(format: MatchFormat): int
+}
+
+' ==================== REPOSITORIES ====================
+
+interface IRepository<T> <<Repository>> {
+  + getById(id: int): T
+  + getAll(): List<T>
+  + create(entity: T): T
+  + update(entity: T): T
+  + delete(id: int): void
+}
+
+interface ITournamentRepository <<Repository>> {
+  + getActive(): List<Tournament>
+  + getBySlug(slug: string): Tournament
+  + getByOrganizer(organizerId: int): List<Tournament>
+}
+
+interface IPlayerRepository <<Repository>> {
+  + getByUserId(userId: int): Player
+  + getByPseudo(pseudo: string): Player
+  + getLeaderboard(limit: int): List<Player>
+}
+
+interface IMatchRepository <<Repository>> {
+  + getByTournament(tournamentId: int): List<Match>
+  + getByPlayer(playerId: int): List<Match>
+  + getLiveMatches(): List<Match>
+}
+
+' ==================== RELATIONS ====================
+
+' User relationships
+User "1" -- "1" Player : has >
+User "1" -- "0..*" Tournament : organizes >
+User "1" -- "0..*" Notification : receives >
+User "1" -- "0..*" AuditLog : generates >
+User ..> UserRole
+User *-- Email
+User *-- Password
+
+' Player relationships
+Player "1" -- "0..*" TeamMember : participates >
+Player "1" -- "0..*" TournamentRegistration : registers >
+Player "1" -- "0..*" PlayerStatistics : has >
+Player *-- EloRating
+
+' Team relationships
+Team "1" *-- "1..*" TeamMember
+Team "1" -- "1" Player : captain
+
+' Tournament relationships
+Tournament "1" *-- "0..*" TournamentRegistration
+Tournament "1" *-- "0..*" WaitingList
+Tournament "1" -- "0..1" Bracket
+Tournament ..> TournamentStatus
+Tournament ..> BracketType
+Tournament ..> MatchFormat
+
+' Bracket relationships
+Bracket "1" *-- "1..*" Round
+Bracket ..> BracketType
+
+' Round relationships
+Round "1" *-- "1..*" Match
+
+' Match relationships
+Match "1" -- "0..1" MatchResult
+Match ..> MatchStatus
+
+' Service dependencies
+TournamentService ..> ITournamentRepository : uses
+TournamentService ..> BracketService : uses
+TournamentService ..> NotificationService : uses
+
+BracketService ..> BracketGenerator : uses
+BracketService ..> ITournamentRepository : uses
+
+MatchService ..> IMatchRepository : uses
+MatchService ..> EloService : uses
+MatchService ..> NotificationService : uses
+
+EloService ..> EloCalculator : uses
+EloService ..> IPlayerRepository : uses
+
+AuthService ..> IRepository : uses
+
+' Repository implementations
+ITournamentRepository --|> IRepository
+IPlayerRepository --|> IRepository
+IMatchRepository --|> IRepository
+
+note right of EloCalculator
+  Algorithme ELO pur
+  sans dépendances externes
+end note
+
+note right of BracketGenerator
+  Génération de brackets
+  selon différents formats
+end note
+
+note bottom of Tournament
+  Entité racine pour
+  l'agrégat Tournament
+end note
+
+@enduml

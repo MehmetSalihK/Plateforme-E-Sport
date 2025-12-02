@@ -1,0 +1,74 @@
+@startuml sequence-tournament-registration
+
+title Séquence: Inscription à un Tournoi
+
+actor "Joueur" as player
+participant "Frontend" as frontend
+participant "API Gateway" as api
+participant "AuthMiddleware" as auth
+participant "TournamentController" as controller
+participant "TournamentService" as service
+participant "TournamentRepository" as repo
+participant "NotificationService" as notif
+participant "EmailService" as email
+participant "WebSocket" as ws
+database "PostgreSQL" as db
+
+== Authentification ==
+player -> frontend: Cliquer "S'inscrire"
+frontend -> api: POST /tournaments/:id/register\nAuthorization: Bearer <token>
+api -> auth: Valider JWT
+auth -> auth: Vérifier signature
+auth -> auth: Extraire userId, role
+auth --> api: User authentifié
+api -> controller: registerParticipant(tournamentId, userId)
+
+== Validation ==
+controller -> service: registerParticipant(tournamentId, userId)
+service -> repo: getTournamentById(tournamentId)
+repo -> db: SELECT * FROM tournaments WHERE id = ?
+db --> repo: Tournament data
+repo --> service: Tournament
+
+alt Tournoi complet
+    service -> service: tournament.isFull()
+    service -> repo: addToWaitingList(tournamentId, userId)
+    repo -> db: INSERT INTO waiting_lists
+    db --> repo: Success
+    repo --> service: WaitingList entry
+    service --> controller: WaitingListResult
+    controller --> api: 200 OK (waiting list)
+    api --> frontend: { status: "waiting_list", position: 5 }
+    frontend --> player: "Ajouté à la liste d'attente (position 5)"
+else Places disponibles
+    service -> repo: createRegistration(tournamentId, userId)
+    repo -> db: BEGIN TRANSACTION
+    repo -> db: INSERT INTO tournament_registrations
+    db --> repo: Registration created
+    repo -> db: UPDATE tournaments SET current_participants = current_participants + 1
+    db --> repo: Success
+    repo -> db: COMMIT
+    db --> repo: Transaction committed
+    repo --> service: Registration
+    
+    == Notifications ==
+    service -> notif: notifyRegistrationConfirmed(userId, tournament)
+    
+    par Notification in-app
+        notif -> db: INSERT INTO notifications
+        notif -> ws: broadcast('notification', data)
+        ws --> frontend: WebSocket event
+        frontend --> player: Notification popup
+    and Email
+        notif -> email: sendEmail(user.email, 'registration_confirmed')
+        email -> email: Render template
+        email --> notif: Email sent
+    end
+    
+    service --> controller: RegistrationResult
+    controller --> api: 201 Created
+    api --> frontend: { status: "confirmed", registrationId: 42 }
+    frontend --> player: "Inscription confirmée !"
+end
+
+@enduml

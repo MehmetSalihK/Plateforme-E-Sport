@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: esport-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-esport_platform}
+      MYSQL_USER: ${DB_USER:-esport_app}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-root}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql # Uncomment if you have an init script compatible with MySQL
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - esport-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: esport-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - esport-network
+
+  # Backend API (Node.js)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: esport-backend
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=${DB_USER:-root}
+      - DB_PASSWORD=${DB_PASSWORD:-root}
+      - DB_NAME=${DB_NAME:-esport_platform}
+      - JWT_SECRET=${JWT_SECRET:-votre_cle_secrete_jwt_a_changer_en_production}
+      - FRONTEND_URL=http://localhost:3000
+    ports:
+      - "5000:5000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - esport-network
+
+  # Frontend (React + Vite)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: esport-frontend
+    environment:
+      - VITE_API_URL=http://localhost:5000/api
+      - CHOKIDAR_USEPOLLING=true # Needed for hot reload on Windows
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host
+    depends_on:
+      - backend
+    networks:
+      - esport-network
+
+  # PHPMyAdmin (Optional, for DB management)
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: esport-phpmyadmin
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+    ports:
+      - "8080:80"
+    depends_on:
+      - mysql
+    networks:
+      - esport-network
+
+networks:
+  esport-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:

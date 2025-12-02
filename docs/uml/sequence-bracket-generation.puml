@@ -1,0 +1,93 @@
+@startuml sequence-bracket-generation
+
+title Séquence: Génération Automatique de Bracket
+
+actor "Organisateur" as organizer
+participant "Frontend" as frontend
+participant "API" as api
+participant "BracketController" as controller
+participant "BracketService" as service
+participant "BracketGenerator" as generator
+participant "TournamentRepository" as tournamentRepo
+participant "BracketRepository" as bracketRepo
+database "PostgreSQL" as db
+
+organizer -> frontend: Cliquer "Générer Bracket"
+frontend -> api: POST /tournaments/:id/bracket/generate
+api -> controller: generateBracket(tournamentId)
+controller -> service: generateBracket(tournamentId)
+
+== Récupération des participants ==
+service -> tournamentRepo: getTournamentWithParticipants(tournamentId)
+tournamentRepo -> db: SELECT t.*, tr.* FROM tournaments t\nJOIN tournament_registrations tr\nWHERE t.id = ? AND tr.status = 'confirmed'
+db --> tournamentRepo: Tournament + Participants
+tournamentRepo --> service: Tournament(64 participants)
+
+== Validation ==
+service -> service: Valider nombre de participants\n(doit être puissance de 2 ou proche)
+alt Nombre invalide
+    service --> controller: Error: Invalid participant count
+    controller --> api: 400 Bad Request
+    api --> frontend: "Nombre de participants invalide"
+    frontend --> organizer: Message d'erreur
+else Nombre valide
+    
+    == Seeding des participants ==
+    service -> service: Trier participants par ELO (DESC)
+    service -> generator: generateSingleElimination(participants)
+    
+    generator -> generator: Calculer nombre de rounds\nrounds = log2(64) = 6
+    generator -> generator: Créer structure bracket vide
+    
+    loop Pour chaque round (6 rounds)
+        generator -> generator: Créer round
+        generator -> generator: Calculer matchs dans ce round\nRound 1: 32 matchs\nRound 2: 16 matchs\n...\nRound 6 (finale): 1 match
+        
+        loop Pour chaque match du round
+            generator -> generator: Créer match vide
+        end
+    end
+    
+    == Assignation des participants (seeding) ==
+    generator -> generator: Appliquer seeding classique\n1 vs 64, 2 vs 63, ..., 32 vs 33
+    
+    loop Pour chaque match du Round 1
+        generator -> generator: Assigner participant1 (seed élevé)
+        generator -> generator: Assigner participant2 (seed bas)
+    end
+    
+    == Liaison des matchs ==
+    generator -> generator: Lier matchs entre rounds\n(winner match 1 → match 33, etc.)
+    
+    generator --> service: Bracket complet
+    
+    == Sauvegarde en base ==
+    service -> db: BEGIN TRANSACTION
+    
+    service -> bracketRepo: createBracket(bracket)
+    bracketRepo -> db: INSERT INTO brackets
+    db --> bracketRepo: Bracket ID
+    
+    loop Pour chaque round
+        bracketRepo -> db: INSERT INTO rounds
+        db --> bracketRepo: Round ID
+        
+        loop Pour chaque match
+            bracketRepo -> db: INSERT INTO matches\n(participant1_id, participant2_id, next_match_id)
+            db --> bracketRepo: Match ID
+        end
+    end
+    
+    service -> db: UPDATE tournaments SET status = 'ongoing'
+    db --> service: Success
+    
+    service -> db: COMMIT
+    db --> service: Transaction committed
+    
+    service --> controller: BracketDto
+    controller --> api: 201 Created
+    api --> frontend: { bracketId, rounds: [...], matches: [...] }
+    frontend --> organizer: Afficher bracket généré
+end
+
+@enduml

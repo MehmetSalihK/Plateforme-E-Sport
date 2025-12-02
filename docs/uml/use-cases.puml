@@ -1,0 +1,152 @@
+@startuml use-cases-esport-platform
+
+' Configuration
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+left to right direction
+
+' Acteurs
+actor "Visiteur" as visitor
+actor "Joueur" as player
+actor "Organisateur" as organizer
+actor "Administrateur" as admin
+
+' Héritage des rôles
+player -up-|> visitor
+organizer -up-|> player
+admin -up-|> organizer
+
+' Système
+rectangle "Plateforme E-Sport" {
+  
+  package "Gestion des Comptes" {
+    usecase "S'inscrire" as UC1
+    usecase "Se connecter" as UC2
+    usecase "Modifier profil" as UC3
+    usecase "Réinitialiser mot de passe" as UC4
+    usecase "Supprimer compte (RGPD)" as UC5
+  }
+  
+  package "Gestion des Tournois" {
+    usecase "Consulter tournois" as UC10
+    usecase "Voir détails tournoi" as UC11
+    usecase "S'inscrire à un tournoi" as UC12
+    usecase "Se désinscrire" as UC13
+    usecase "Rejoindre liste d'attente" as UC14
+    usecase "Créer tournoi" as UC15
+    usecase "Modifier tournoi" as UC16
+    usecase "Supprimer tournoi" as UC17
+    usecase "Gérer participants" as UC18
+    usecase "Valider check-in" as UC19
+  }
+  
+  package "Gestion des Brackets" {
+    usecase "Voir bracket" as UC20
+    usecase "Générer bracket" as UC21
+    usecase "Modifier bracket manuellement" as UC22
+    usecase "Avancer rounds" as UC23
+  }
+  
+  package "Gestion des Matchs" {
+    usecase "Consulter matchs" as UC30
+    usecase "Voir détails match" as UC31
+    usecase "Mettre à jour score" as UC32
+    usecase "Valider résultat" as UC33
+    usecase "Planifier match" as UC34
+    usecase "Recevoir notifications temps réel" as UC35
+  }
+  
+  package "Gestion des Équipes" {
+    usecase "Créer équipe" as UC40
+    usecase "Inviter joueurs" as UC41
+    usecase "Rejoindre équipe" as UC42
+    usecase "Quitter équipe" as UC43
+    usecase "Gérer membres" as UC44
+  }
+  
+  package "Statistiques & Classement" {
+    usecase "Consulter classement ELO" as UC50
+    usecase "Voir statistiques joueur" as UC51
+    usecase "Voir historique matchs" as UC52
+    usecase "Consulter dashboard" as UC53
+  }
+  
+  package "Administration" {
+    usecase "Gérer utilisateurs" as UC60
+    usecase "Modifier rôles" as UC61
+    usecase "Bloquer/Débloquer comptes" as UC62
+    usecase "Consulter logs audit" as UC63
+    usecase "Configurer système" as UC64
+    usecase "Voir statistiques globales" as UC65
+  }
+  
+  package "Notifications" {
+    usecase "Recevoir notifications" as UC70
+    usecase "Gérer préférences notifications" as UC71
+  }
+}
+
+' Relations Visiteur
+visitor --> UC1
+visitor --> UC2
+visitor --> UC4
+visitor --> UC10
+visitor --> UC11
+visitor --> UC20
+visitor --> UC30
+visitor --> UC31
+visitor --> UC50
+
+' Relations Joueur
+player --> UC3
+player --> UC5
+player --> UC12
+player --> UC13
+player --> UC14
+player --> UC35
+player --> UC40
+player --> UC41
+player --> UC42
+player --> UC43
+player --> UC51
+player --> UC52
+player --> UC70
+player --> UC71
+
+' Relations Organisateur
+organizer --> UC15
+organizer --> UC16
+organizer --> UC17
+organizer --> UC18
+organizer --> UC19
+organizer --> UC21
+organizer --> UC22
+organizer --> UC23
+organizer --> UC32
+organizer --> UC33
+organizer --> UC34
+organizer --> UC44
+organizer --> UC53
+
+' Relations Administrateur
+admin --> UC60
+admin --> UC61
+admin --> UC62
+admin --> UC63
+admin --> UC64
+admin --> UC65
+
+' Extensions et Inclusions
+UC12 ..> UC14 : <<extend>>\n[tournoi complet]
+UC21 ..> UC18 : <<include>>
+UC32 ..> UC35 : <<include>>
+UC33 ..> UC35 : <<include>>
+
+' Système externe
+actor "Système Email" as email
+UC1 ..> email : <<notify>>
+UC4 ..> email : <<notify>>
+UC12 ..> email : <<notify>>
+UC35 ..> email : <<notify>>
+
+@enduml

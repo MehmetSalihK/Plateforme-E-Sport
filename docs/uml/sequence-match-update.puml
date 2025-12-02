@@ -1,0 +1,71 @@
+@startuml sequence-match-update
+
+title Séquence: Mise à Jour de Score en Temps Réel
+
+actor "Organisateur" as organizer
+participant "Frontend" as frontend
+participant "API" as api
+participant "MatchController" as controller
+participant "MatchService" as service
+participant "EloService" as elo
+participant "BracketService" as bracket
+participant "NotificationService" as notif
+participant "WebSocket Hub" as ws
+database "PostgreSQL" as db
+actor "Spectateurs" as spectators
+
+== Mise à jour du score ==
+organizer -> frontend: Saisir score (2-1)
+frontend -> api: PUT /matches/:id/score\n{ p1Score: 2, p2Score: 1 }
+api -> controller: updateScore(matchId, scores)
+controller -> service: updateMatchScore(matchId, scores)
+
+service -> db: BEGIN TRANSACTION
+service -> db: SELECT * FROM matches WHERE id = ? FOR UPDATE
+db --> service: Match data
+
+service -> service: Valider scores\n(cohérence avec BO3)
+service -> db: UPDATE matches SET status = 'completed', winner_id = ?
+db --> service: Success
+
+== Calcul ELO ==
+service -> elo: calculateEloChanges(participant1, participant2, score)
+elo -> db: SELECT elo_rating FROM players WHERE id IN (?, ?)
+db --> elo: Current ELO ratings
+elo -> elo: EloCalculator.calculateNewRatings(1850, 1720, 1.0)
+elo -> db: UPDATE players SET elo_rating = ?
+db --> elo: Success
+elo --> service: { p1Change: +15, p2Change: -15 }
+
+service -> db: INSERT INTO match_results (scores, elo_changes)
+db --> service: Result created
+
+== Mise à jour du Bracket ==
+service -> bracket: advanceWinner(matchId, winnerId)
+bracket -> db: UPDATE matches SET participant1_id = ? WHERE id = next_match_id
+db --> bracket: Next match updated
+bracket --> service: Bracket updated
+
+service -> db: COMMIT
+db --> service: Transaction committed
+
+== Notifications Temps Réel ==
+service -> notif: broadcastMatchUpdate(matchId, result)
+
+par WebSocket broadcast
+    notif -> ws: emit('match_score_updated', data)
+    ws --> spectators: Mise à jour en direct
+    ws --> frontend: Score actualisé
+    frontend --> organizer: Confirmation visuelle
+and Notifications joueurs
+    notif -> db: INSERT INTO notifications (type: 'match_completed')
+    notif -> ws: emit('notification', { userId, message })
+    ws --> spectators: Notification match terminé
+end
+
+service --> controller: MatchResult
+controller --> api: 200 OK
+api --> frontend: { matchId, winnerId, eloChanges, nextMatch }
+frontend --> organizer: "Score enregistré ! ELO mis à jour"
+
+@enduml
